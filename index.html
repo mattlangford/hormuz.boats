@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Strait of Hormuz — Daily Vessel Transits</title>
+  <style>
+    :root { color-scheme: light dark; }
+    html { height: 100%; }
+    body {
+      margin: 0;
+      line-height: 1.6;
+      font-size: 1.05rem;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      display: flex;
+      flex-direction: column;
+      min-height: 100dvh;
+    }
+    header, footer {
+      display: flex;
+      align-items: center;
+      padding: 1rem 2rem;
+      box-sizing: border-box;
+    }
+    header {
+      justify-content: space-between;
+      border-bottom: 1px solid #ccc;
+    }
+    header .site-title a {
+      text-decoration: none;
+      font-weight: bold;
+      font-size: 1.2rem;
+      color: inherit;
+    }
+    main {
+      flex: 1 0 auto;
+      width: min(100%, 960px);
+      margin: 0 auto;
+      padding: 1.5rem 1.5rem 3rem;
+      box-sizing: border-box;
+    }
+    h1 { margin-bottom: 0.25rem; }
+    h2 { margin: 2.5rem 0 0.5rem; font-size: 1.05rem; opacity: 0.75; font-weight: 600; letter-spacing: .02em; text-transform: uppercase; }
+    .subtitle { margin-top: 0; opacity: 0.65; font-size: 0.92rem; }
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 0.75rem;
+      margin: 1.5rem 0;
+    }
+    .stat {
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      padding: 0.65rem 1rem;
+    }
+    .stat-label { font-size: 0.75rem; opacity: 0.6; margin-bottom: 0.1rem; }
+    .stat-value { font-size: 1.45rem; font-weight: 600; }
+    .stat-unit  { font-size: 0.72rem; opacity: 0.6; }
+    .stat.alert .stat-value { color: #c0392b; }
+    .chart-wrap {
+      position: relative;
+      margin: 1rem 0 0.5rem;
+      height: 340px;
+    }
+    .chart-wrap.tall { height: 260px; }
+    .caption {
+      font-size: 0.78rem;
+      opacity: 0.6;
+      margin: 0.25rem 0 0;
+    }
+    .caption a { color: inherit; }
+    #status-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      font-size: 0.88rem;
+      margin: 1rem 0 0;
+    }
+    .badge {
+      display: inline-block;
+      padding: 0.15rem 0.55rem;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+    .badge.open     { background: #27ae60; color: #fff; }
+    .badge.restricted { background: #e67e22; color: #fff; }
+    .badge.closed   { background: #c0392b; color: #fff; }
+    .badge.unknown  { background: #aaa;    color: #fff; }
+    #loading { opacity: 0.5; font-style: italic; }
+    footer {
+      justify-content: center;
+      border-top: 1px solid #ccc;
+      font-size: 0.82rem;
+      opacity: 0.65;
+      flex-direction: column;
+      text-align: center;
+      gap: 0.2rem;
+      padding: 1rem;
+    }
+    footer a { color: inherit; }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="site-title"><a href="/">hormuz.boats</a></div>
+  </header>
+
+  <main>
+    <h1>Strait of Hormuz</h1>
+    <p class="subtitle">Daily vessel transits — live from IMF PortWatch via <a href="https://straits.live/api" target="_blank" rel="noopener">straits.live</a></p>
+
+    <div id="status-bar"><span id="loading">Loading…</span></div>
+    <div class="stats" id="stats"></div>
+
+    <h2>Daily transits — past 365 days</h2>
+    <div class="chart-wrap">
+      <canvas id="chart-daily"></canvas>
+    </div>
+    <p class="caption">
+      Vessel count per day through the Strait of Hormuz (IMF PortWatch chokepoint6).
+      Dashed line = pre-crisis baseline median (<span id="baseline-label">—</span> ships/day).
+      Source: <a href="https://straits.live/api/v1/transits" target="_blank" rel="noopener">straits.live/api/v1/transits</a>.
+    </p>
+
+    <h2>By vessel type</h2>
+    <div class="chart-wrap tall">
+      <canvas id="chart-type"></canvas>
+    </div>
+    <p class="caption">
+      Tanker vs. cargo vessels per day. Tankers carry crude oil and petroleum products.
+    </p>
+
+    <h2>Annual oil flow (EIA)</h2>
+    <div class="chart-wrap tall">
+      <canvas id="chart-eia"></canvas>
+    </div>
+    <p class="caption">
+      Total petroleum through Hormuz in million barrels per day — crude + products.
+      Source: <a href="https://www.eia.gov/international/analysis/special-topics/World_Oil_Transit_Chokepoints"
+        target="_blank" rel="noopener">EIA World Oil Transit Chokepoints</a>, Vortexa tanker tracking.
+    </p>
+  </main>
+
+  <footer>
+    <div>Daily data: <a href="https://straits.live" target="_blank" rel="noopener">straits.live</a> (IMF PortWatch) · Annual flow: <a href="https://www.eia.gov/international/analysis/special-topics/World_Oil_Transit_Chokepoints" target="_blank" rel="noopener">EIA</a></div>
+    <div>Page loads live data on each visit.</div>
+  </footer>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <script>
+    // ── Static EIA annual data (updated by fetch_data.py) ───────────────────
+    // ── DATA (regenerated by fetch_data.py) ─────────────────────────────────
+    const DATA = {
+          "updated": "June 2026",
+          "labels": [
+                "2020",
+                "2021",
+                "2022",
+                "2023",
+                "2024",
+                "1H25"
+          ],
+          "total": [
+                19.07,
+                19.39,
+                21.42,
+                21.39,
+                20.26,
+                20.9
+          ],
+          "crude": [
+                14.4,
+                14.65,
+                16.24,
+                15.81,
+                14.65,
+                14.73
+          ],
+          "products": [
+                4.81,
+                5.0,
+                5.46,
+                5.85,
+                5.94,
+                6.1
+          ],
+          "origin": {
+                "Saudi Arabia": [6.26, 6.38, 6.94, 6.3, 5.59, 5.55],
+                "Iraq":         [2.88, 2.87, 3.21, 3.26, 3.27, 3.28],
+                "UAE":          [2.03, 1.98, 2.48, 2.35, 2.2, 2.05],
+                "Iran":         [0.43, 0.83, 0.99, 1.48, 1.46, 1.59],
+                "Kuwait":       [1.87, 1.82, 1.85, 1.62, 1.38, 1.49],
+                "Qatar":        [0.77, 0.66, 0.65, 0.69, 0.66, 0.66],
+                "Other":        [0.16, 0.11, 0.12, 0.11, 0.09, 0.11]
+          }
+    };
+    // ────────────────────────────────────────────────────────────────────────
+
+    const dark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+    const gridColor = dark ? "rgba(255,255,255,0.09)" : "rgba(0,0,0,0.07)";
+    const tickColor = dark ? "#aaa" : "#555";
+    const textColor = dark ? "#ddd" : "#222";
+
+    // ── EIA chart (static) ───────────────────────────────────────────────────
+    new Chart(document.getElementById("chart-eia"), {
+      type: "bar",
+      data: {
+        labels: DATA.labels,
+        datasets: [
+          { label: "Crude oil & condensate", data: DATA.crude,    stack: "s", backgroundColor: "rgba(30,100,180,0.72)", borderWidth: 0 },
+          { label: "Petroleum products",     data: DATA.products, stack: "s", backgroundColor: "rgba(90,190,200,0.72)", borderWidth: 0 },
+        ],
+      },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: {
+          tooltip: { callbacks: { footer: items => "Total: " + items.reduce((s,i) => s+i.parsed.y, 0).toFixed(2) + " million b/d" } },
+          legend: { labels: { color: textColor } },
+        },
+        scales: {
+          x: { stacked: true, grid: { color: gridColor }, ticks: { color: tickColor } },
+          y: { stacked: true, min: 0, grid: { color: gridColor }, ticks: { color: tickColor },
+               title: { display: true, text: "million barrels per day", color: tickColor } },
+        },
+      },
+    });
+
+    // ── Live data fetch ──────────────────────────────────────────────────────
+    async function loadLive() {
+      const [transitsResp, statusResp] = await Promise.all([
+        fetch("https://straits.live/api/v1/transits?history=1&limit=365"),
+        fetch("https://straits.live/status"),
+      ]);
+      const transits = await transitsResp.json();
+      const status   = await statusResp.json();
+
+      document.getElementById("loading").remove();
+
+      const hist = (transits.history || []).slice().reverse(); // oldest → newest
+      const latest = transits.latest;
+      const baseline = latest.preCrisisBaselineMedian;
+      const today = latest.nTotal;
+      const todayTanker = latest.nTanker;
+
+      // Status badge
+      const verdict = status?.verdict?.status ?? "unknown";
+      const statusBar = document.getElementById("status-bar");
+      statusBar.innerHTML = `
+        <span class="badge ${verdict}">${verdict}</span>
+        <span>as of ${latest.date} · ${today} vessels today (baseline: ${baseline}/day)</span>`;
+
+      document.getElementById("baseline-label").textContent = baseline;
+
+      // Summary stats
+      const pctBaseline = baseline > 0 ? Math.round(today / baseline * 100) : 0;
+      const statsEl = document.getElementById("stats");
+      statsEl.innerHTML = [
+        { label: "Today's transits", value: today,         unit: "vessels", alert: today < baseline * 0.5 },
+        { label: "Tankers today",    value: todayTanker,   unit: "vessels" },
+        { label: "vs. baseline",     value: pctBaseline + "%", unit: "of normal", alert: pctBaseline < 50 },
+        { label: "Pre-crisis median",value: baseline,      unit: "vessels/day" },
+        { label: "7-day mean",       value: mean7(hist),   unit: "vessels/day" },
+        { label: "30-day median",    value: latest.baselineMedian, unit: "vessels/day" },
+      ].map(s => `
+        <div class="stat${s.alert ? " alert" : ""}">
+          <div class="stat-label">${s.label}</div>
+          <div class="stat-value">${s.value}</div>
+          <div class="stat-unit">${s.unit}</div>
+        </div>`).join("");
+
+      // ── Daily total chart ──────────────────────────────────────────────────
+      const labels = hist.map(r => r.date);
+      const totals  = hist.map(r => r.nTotal);
+      const tankers = hist.map(r => r.nTanker);
+      const cargo   = hist.map(r => r.nCargo);
+
+      new Chart(document.getElementById("chart-daily"), {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Total vessels",
+              data: totals,
+              borderColor: "rgba(30,100,180,0.9)",
+              backgroundColor: "rgba(30,100,180,0.10)",
+              fill: true,
+              tension: 0.25,
+              pointRadius: 0,
+              borderWidth: 1.5,
+            },
+            {
+              label: `Pre-crisis baseline (${baseline})`,
+              data: labels.map(() => baseline),
+              borderColor: "rgba(180,60,60,0.55)",
+              borderDash: [6, 4],
+              borderWidth: 1.5,
+              pointRadius: 0,
+              fill: false,
+            },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { labels: { color: textColor, boxWidth: 12 } },
+            tooltip: {
+              callbacks: {
+                label: ctx => `${ctx.dataset.label}: ${ctx.parsed.y}`,
+              },
+            },
+          },
+          scales: {
+            x: {
+              type: "time",
+              time: { unit: "month", tooltipFormat: "MMM d, yyyy" },
+              grid: { color: gridColor },
+              ticks: { color: tickColor, maxRotation: 0 },
+            },
+            y: {
+              min: 0,
+              grid: { color: gridColor },
+              ticks: { color: tickColor },
+              title: { display: true, text: "vessels per day", color: tickColor },
+            },
+          },
+        },
+      });
+
+      // ── Tanker vs cargo chart ──────────────────────────────────────────────
+      new Chart(document.getElementById("chart-type"), {
+        type: "bar",
+        data: {
+          labels,
+          datasets: [
+            { label: "Tanker",          data: tankers, backgroundColor: "rgba(30,100,180,0.75)",  stack: "s", borderWidth: 0 },
+            { label: "Cargo / other",   data: cargo,   backgroundColor: "rgba(90,190,200,0.65)",  stack: "s", borderWidth: 0 },
+          ],
+        },
+        options: {
+          responsive: true, maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: { legend: { labels: { color: textColor, boxWidth: 12 } } },
+          scales: {
+            x: {
+              type: "time",
+              time: { unit: "month", tooltipFormat: "MMM d, yyyy" },
+              grid: { color: gridColor },
+              ticks: { color: tickColor, maxRotation: 0 },
+              stacked: true,
+            },
+            y: {
+              stacked: true,
+              min: 0,
+              grid: { color: gridColor },
+              ticks: { color: tickColor },
+              title: { display: true, text: "vessels per day", color: tickColor },
+            },
+          },
+        },
+      });
+    }
+
+    function mean7(hist) {
+      const last7 = hist.slice(-7).map(r => r.nTotal);
+      return last7.length ? Math.round(last7.reduce((a, b) => a + b, 0) / last7.length) : "—";
+    }
+
+    loadLive().catch(err => {
+      document.getElementById("loading").textContent = "Failed to load live data: " + err.message;
+    });
+  </script>
+</body>
+</html>
